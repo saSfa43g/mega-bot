@@ -3,12 +3,8 @@ import math
 import logging
 from pyrogram import Client, filters, idle
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from mega import Mega
+from megadownloader import MegaDownloader
 from config import Config
-
-# إعداد تسجيل الدخول لحساب Mega
-mega = Mega()
-m = mega.login(Config.MEGA_EMAIL, Config.MEGA_PASSWORD)
 
 # إعداد بوت تيليجرام
 bot = Client(
@@ -58,57 +54,31 @@ async def handle_mega(_, message):
     status = await message.reply("📥 جاري المعالجة...")
 
     try:
-        file_info = m.get_public_url_info(url)
+        # استخدام MegaDownloader
+        mega = MegaDownloader()
+        mega.download_url(url, DOWNLOAD_DIR)  # تحميل الملف أو المجلد
+        
     except Exception as e:
         await status.edit(f"❌ خطأ أثناء الوصول للرابط: {e}")
         return
 
-    # حالة رابط مجلد
-    if file_info['type'] == 'folder':
-        files = m.download_url(url, DOWNLOAD_DIR)
-        await status.edit("📁 تم تحميل المجلد، جاري الإرسال...")
+    # تحميل المجلدات أو الملفات باستخدام mega-downloader
+    try:
+        files = [os.path.join(DOWNLOAD_DIR, f) for f in os.listdir(DOWNLOAD_DIR)]
         for file_path in files:
-            try:
-                if os.path.getsize(file_path) > CHUNK_SIZE:
-                    parts = split_file(file_path)
-                    for i, part in enumerate(parts):
-                        caption = f"📦 {os.path.basename(file_path)}\n📄 جزء {i+1} من {len(parts)}\n🧠 بواسطة @Z_Bots"
-                        await bot.send_document(message.chat.id, document=part, caption=caption)
-                        os.remove(part)
-                else:
-                    caption = f"📄 {os.path.basename(file_path)}\n🧠 بواسطة @Z_Bots"
-                    await bot.send_document(message.chat.id, document=file_path, caption=caption)
-                os.remove(file_path)
-            except Exception as e:
-                await bot.send_message(message.chat.id, f"❌ فشل في إرسال {file_path}: {e}")
-        await status.delete()
-
-    # حالة رابط ملف مفرد
-    else:
-        try:
-            file_path = m.download_url(url, DOWNLOAD_DIR)
-        except Exception as e:
-            await status.edit(f"❌ خطأ أثناء التحميل: {e}")
-            return
-
-        size_mb = os.path.getsize(file_path) / (1024 * 1024)
-        await status.edit(f"✅ تم التحميل ({size_mb:.2f} MB)، جاري الرفع...")
-
-        try:
             if os.path.getsize(file_path) > CHUNK_SIZE:
                 parts = split_file(file_path)
                 for i, part in enumerate(parts):
-                    caption = f"📦 جزء {i+1} من {len(parts)}\n📤 تم بواسطة البوت @Z_Bots"
+                    caption = f"📦 {os.path.basename(file_path)}\n📄 جزء {i+1} من {len(parts)}\n🧠 بواسطة @Z_Bots"
                     await bot.send_document(message.chat.id, document=part, caption=caption)
                     os.remove(part)
             else:
-                caption = f"📤 تم بواسطة البوت @صصص"
+                caption = f"📄 {os.path.basename(file_path)}\n🧠 بواسطة @Z_Bots"
                 await bot.send_document(message.chat.id, document=file_path, caption=caption)
-            await status.delete()
-        except Exception as e:
-            await status.edit(f"❌ فشل أثناء الرفع: {e}")
-
-        os.remove(file_path)
+            os.remove(file_path)
+        await status.delete()
+    except Exception as e:
+        await status.edit(f"❌ خطأ أثناء تحميل الملفات: {e}")
 
 bot.start()
 idle()
