@@ -1,24 +1,20 @@
 import os
 import math
-import logging
+import subprocess
 from pyrogram import Client, filters, idle
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from megadownloader import MegaDownloader
 from config import Config
 
-# إعداد بوت تيليجرام
 bot = Client(
-    "MegaNzBot",
+    "MegaBot",
     api_id=Config.API_ID,
     api_hash=Config.API_HASH,
     bot_token=Config.BOT_TOKEN,
 )
 
-# إعداد المجلد المؤقت للتحميل
 DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-# تقسيم الملف إلى أجزاء
 CHUNK_SIZE_MB = 1900
 CHUNK_SIZE = CHUNK_SIZE_MB * 1024 * 1024
 
@@ -34,6 +30,18 @@ def split_file(file_path):
             parts.append(part_name)
     return parts
 
+def download_with_megatools(url, download_dir):
+    try:
+        result = subprocess.run(
+            ["megadl", "--path", download_dir, url],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True
+        )
+        return True, result.stdout.decode()
+    except subprocess.CalledProcessError as e:
+        return False, e.stderr.decode()
+
 @bot.on_message(filters.command("start") & filters.private)
 async def start(_, message):
     user = message.from_user.mention
@@ -41,7 +49,7 @@ async def start(_, message):
         f"""👋 أهلاً {user}،
 
 أنا بوت لتحميل روابط MEGA.NZ ورفعها إلى تيليجرام 🧠
-أرسل رابط ملف أو مجلد Mega.nz وسأتولى الباقي ✅""",
+أرسل رابط ملف Mega.nz وسأتولى الباقي ✅""",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("📢 قناتنا", url="https://t.me/صص")]
         ])
@@ -50,21 +58,15 @@ async def start(_, message):
 @bot.on_message(filters.regex("https://mega.nz/") & filters.private)
 async def handle_mega(_, message):
     url = message.text
-    user = message.from_user.mention
-    status = await message.reply("📥 جاري المعالجة...")
+    status = await message.reply("📥 جاري التحميل...")
 
-    try:
-        # استخدام MegaDownloader
-        mega = MegaDownloader()
-        mega.download_url(url, DOWNLOAD_DIR)  # تحميل الملف أو المجلد
-        
-    except Exception as e:
-        await status.edit(f"❌ خطأ أثناء الوصول للرابط: {e}")
+    success, output = download_with_megatools(url, DOWNLOAD_DIR)
+    if not success:
+        await status.edit(f"❌ فشل التحميل:\n{output}")
         return
 
-    # تحميل المجلدات أو الملفات باستخدام mega-downloader
+    files = [os.path.join(DOWNLOAD_DIR, f) for f in os.listdir(DOWNLOAD_DIR)]
     try:
-        files = [os.path.join(DOWNLOAD_DIR, f) for f in os.listdir(DOWNLOAD_DIR)]
         for file_path in files:
             if os.path.getsize(file_path) > CHUNK_SIZE:
                 parts = split_file(file_path)
@@ -78,7 +80,7 @@ async def handle_mega(_, message):
             os.remove(file_path)
         await status.delete()
     except Exception as e:
-        await status.edit(f"❌ خطأ أثناء تحميل الملفات: {e}")
+        await status.edit(f"❌ خطأ أثناء الإرسال: {e}")
 
 bot.start()
 idle()
